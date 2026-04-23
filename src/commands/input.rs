@@ -67,11 +67,21 @@ async fn dispatch_mouse(
 
 pub async fn click(client: &mut CdpClient, session_id: &str, selector: &str) -> Result<String> {
     let (x, y) = get_element_center(client, session_id, selector).await?;
+    click_at(client, session_id, x, y).await?;
+    Ok(format!("Clicked: {selector}"))
+}
+
+pub async fn click_at(
+    client: &mut CdpClient,
+    session_id: &str,
+    x: f64,
+    y: f64,
+) -> Result<String> {
     dispatch_mouse(client, session_id, "mouseMoved", x, y, "none", 0).await?;
     dispatch_mouse(client, session_id, "mousePressed", x, y, "left", 1).await?;
     dispatch_mouse(client, session_id, "mouseReleased", x, y, "left", 1).await?;
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    Ok(format!("Clicked: {selector}"))
+    Ok(format!("Clicked at ({x}, {y})"))
 }
 
 pub async fn hover(client: &mut CdpClient, session_id: &str, selector: &str) -> Result<String> {
@@ -134,11 +144,26 @@ pub async fn fill(
     Ok(format!("Filled '{selector}' with: {value}"))
 }
 
-pub async fn type_text(client: &mut CdpClient, session_id: &str, text: &str) -> Result<String> {
+pub async fn type_text(
+    client: &mut CdpClient,
+    session_id: &str,
+    text: &str,
+    submit_key: Option<&str>,
+) -> Result<String> {
     client
         .send_to_target(session_id, "Input.insertText", json!({"text": text}))
         .await?;
-    Ok(format!("Typed: {text}"))
+
+    if let Some(key) = submit_key {
+        press_key(client, session_id, key).await?;
+    }
+
+    Ok(format!(
+        "Typed: {text}{}",
+        submit_key
+            .map(|k| format!(" + {k}"))
+            .unwrap_or_default()
+    ))
 }
 
 pub async fn press_key(client: &mut CdpClient, session_id: &str, key: &str) -> Result<String> {

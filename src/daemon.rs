@@ -142,11 +142,23 @@ async fn execute_command(client: &mut CdpClient, req: &DaemonRequest) -> Result<
             let expr = args["expression"]
                 .as_str()
                 .ok_or(anyhow!("expression required"))?;
-            commands::evaluate::evaluate(client, &session_id, expr, req.json_output).await
+            commands::evaluate::evaluate(
+                client,
+                &session_id,
+                expr,
+                req.json_output,
+                args["dialog_action"].as_str(),
+            )
+            .await
         }
         "click" => {
             let sel = args["selector"].as_str().ok_or(anyhow!("selector required"))?;
             commands::input::click(client, &session_id, sel).await
+        }
+        "click-at" => {
+            let x = args["x"].as_f64().ok_or(anyhow!("x required"))?;
+            let y = args["y"].as_f64().ok_or(anyhow!("y required"))?;
+            commands::input::click_at(client, &session_id, x, y).await
         }
         "fill" => {
             let sel = args["selector"].as_str().ok_or(anyhow!("selector required"))?;
@@ -155,7 +167,8 @@ async fn execute_command(client: &mut CdpClient, req: &DaemonRequest) -> Result<
         }
         "type-text" => {
             let text = args["text"].as_str().ok_or(anyhow!("text required"))?;
-            commands::input::type_text(client, &session_id, text).await
+            commands::input::type_text(client, &session_id, text, args["submit_key"].as_str())
+                .await
         }
         "press-key" => {
             let key = args["key"].as_str().ok_or(anyhow!("key required"))?;

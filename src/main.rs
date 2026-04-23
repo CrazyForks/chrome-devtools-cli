@@ -95,16 +95,27 @@ enum Commands {
     Evaluate {
         /// JavaScript expression
         expression: String,
+        /// Handle dialogs while execution: accept, dismiss, or string for prompt
+        #[arg(long)]
+        dialog_action: Option<String>,
     },
 
     /// Click an element by CSS selector
     Click { selector: String },
 
+    /// Click at specific coordinates
+    ClickAt { x: f64, y: f64 },
+
     /// Fill an input field by CSS selector
     Fill { selector: String, value: String },
 
     /// Type text using keyboard (into currently focused element)
-    TypeText { text: String },
+    TypeText {
+        text: String,
+        /// Optional key to press after typing (e.g. Enter)
+        #[arg(long)]
+        submit_key: Option<String>,
+    },
 
     /// Press a key or key combination (e.g. Enter, Control+A)
     PressKey { key: String },
@@ -160,10 +171,20 @@ fn build_request(cli: &Cli) -> DaemonRequest {
             "screenshot",
             json!({"output": output, "format": format, "full_page": full_page}),
         ),
-        Commands::Evaluate { expression } => ("evaluate", json!({"expression": expression})),
+        Commands::Evaluate {
+            expression,
+            dialog_action,
+        } => (
+            "evaluate",
+            json!({"expression": expression, "dialog_action": dialog_action}),
+        ),
         Commands::Click { selector } => ("click", json!({"selector": selector})),
+        Commands::ClickAt { x, y } => ("click-at", json!({"x": x, "y": y})),
         Commands::Fill { selector, value } => ("fill", json!({"selector": selector, "value": value})),
-        Commands::TypeText { text } => ("type-text", json!({"text": text})),
+        Commands::TypeText { text, submit_key } => (
+            "type-text",
+            json!({"text": text, "submit_key": submit_key}),
+        ),
         Commands::PressKey { key } => ("press-key", json!({"key": key})),
         Commands::Hover { selector } => ("hover", json!({"selector": selector})),
         Commands::Snapshot => ("snapshot", json!({})),
@@ -267,12 +288,13 @@ async fn run_direct(cli: &Cli, ws_url: &str) -> Result<String> {
         Commands::Screenshot { output, format, full_page } => {
             commands::screenshot::take_screenshot(&mut client, &session_id, output.as_deref(), format, *full_page).await
         }
-        Commands::Evaluate { expression } => {
-            commands::evaluate::evaluate(&mut client, &session_id, expression, cli.json).await
+        Commands::Evaluate { expression, dialog_action } => {
+            commands::evaluate::evaluate(&mut client, &session_id, expression, cli.json, dialog_action.as_deref()).await
         }
         Commands::Click { selector } => commands::input::click(&mut client, &session_id, selector).await,
+        Commands::ClickAt { x, y } => commands::input::click_at(&mut client, &session_id, *x, *y).await,
         Commands::Fill { selector, value } => commands::input::fill(&mut client, &session_id, selector, value).await,
-        Commands::TypeText { text } => commands::input::type_text(&mut client, &session_id, text).await,
+        Commands::TypeText { text, submit_key } => commands::input::type_text(&mut client, &session_id, text, submit_key.as_deref()).await,
         Commands::PressKey { key } => commands::input::press_key(&mut client, &session_id, key).await,
         Commands::Hover { selector } => commands::input::hover(&mut client, &session_id, selector).await,
         Commands::Snapshot => commands::snapshot::take_snapshot(&mut client, &session_id, cli.json).await,

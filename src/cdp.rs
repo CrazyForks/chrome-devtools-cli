@@ -46,12 +46,13 @@ impl CdpClient {
         self.send_raw(method, params, Some(session_id)).await
     }
 
-    async fn send_raw(
+    /// Send a command and return the message ID immediately without waiting for response.
+    pub async fn send_raw_no_wait(
         &mut self,
+        session_id: Option<&str>,
         method: &str,
         params: Value,
-        session_id: Option<&str>,
-    ) -> Result<Value> {
+    ) -> Result<u64> {
         let id = self.next_id;
         self.next_id += 1;
 
@@ -65,6 +66,16 @@ impl CdpClient {
 
         let text = serde_json::to_string(&msg)?;
         self.write.send(Message::Text(text.into())).await?;
+        Ok(id)
+    }
+
+    async fn send_raw(
+        &mut self,
+        method: &str,
+        params: Value,
+        session_id: Option<&str>,
+    ) -> Result<Value> {
+        let id = self.send_raw_no_wait(session_id, method, params).await?;
 
         loop {
             let resp_text = self.read_text().await?;
@@ -105,7 +116,7 @@ impl CdpClient {
         }
     }
 
-    async fn read_text(&mut self) -> Result<String> {
+    pub async fn read_text(&mut self) -> Result<String> {
         loop {
             match self.read.next().await {
                 Some(Ok(Message::Text(text))) => return Ok(text.to_string()),

@@ -119,7 +119,7 @@ You can also use `--page <index>` for quick one-offs, or pass the raw hex target
 |---------|-------------|
 | `screenshot --output <path>` | Save screenshot to file |
 | `screenshot --full-page` | Capture full scrollable page |
-| `evaluate <expr>` | Run JavaScript, return result |
+| `evaluate <expr> [--dialog-action <action>]` | Run JavaScript (optionally handle dialogs: accept, dismiss, or prompt text) |
 | `snapshot` | Accessibility tree dump |
 
 ### Interaction
@@ -127,8 +127,9 @@ You can also use `--page <index>` for quick one-offs, or pass the raw hex target
 | Command | Description |
 |---------|-------------|
 | `click <selector>` | Click element by CSS selector |
+| `click-at <x> <y>` | Click at specific coordinates |
 | `fill <selector> <value>` | Fill input field |
-| `type-text <text>` | Type into focused element |
+| `type-text <text> [--submit-key <key>]` | Type into focused element (optionally press key after) |
 | `press-key <key>` | Press key (e.g. `Enter`, `Control+A`) |
 | `hover <selector>` | Hover over element |
 

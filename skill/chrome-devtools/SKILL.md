@@ -53,14 +53,16 @@ chrome-devtools list-pages              # List all tabs with friendly names
 chrome-devtools --target <name> screenshot --output /tmp/page.png
 chrome-devtools --target <name> screenshot --full-page --output /tmp/page.png
 chrome-devtools --target <name> evaluate "document.title"
+chrome-devtools --target <name> evaluate "alert('hello')" --dialog-action accept
 chrome-devtools --target <name> snapshot   # Accessibility tree — use to understand page structure
 ```
 
 ### Interaction
 ```bash
 chrome-devtools --target <name> click "#selector"
+chrome-devtools --target <name> click-at 100 200
 chrome-devtools --target <name> fill "#selector" "value"
-chrome-devtools --target <name> type-text "Hello world"
+chrome-devtools --target <name> type-text "Hello world" --submit-key Enter
 chrome-devtools --target <name> press-key Enter
 chrome-devtools --target <name> press-key Control+A
 chrome-devtools --target <name> hover ".menu-item"
