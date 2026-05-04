@@ -2,6 +2,9 @@
 
 Rust CLI that connects to an existing Chrome browser via the DevTools Protocol. Auto-connects by default — no manual WebSocket URL needed.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/aeroxy/drift)
+
 ## Installation
 
 ### Homebrew (macOS, recommended)
