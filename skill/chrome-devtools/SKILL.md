@@ -40,6 +40,7 @@ Without `--target`, commands default to tab index 0, which may not be the right 
 ### Navigation
 ```bash
 chrome-devtools navigate <url>          # Go to URL, wait for load
+chrome-devtools navigate <url> -o /tmp/res.txt # Save success/result to file
 chrome-devtools navigate --back
 chrome-devtools navigate --forward
 chrome-devtools navigate --reload
@@ -54,8 +55,11 @@ chrome-devtools list-pages              # List all tabs with friendly names
 chrome-devtools --target <name> screenshot --output /tmp/page.png
 chrome-devtools --target <name> screenshot --full-page --output /tmp/page.png
 chrome-devtools --target <name> evaluate "document.title"
+chrome-devtools --target <name> evaluate "document.title" --output /tmp/title.txt
+chrome-devtools --target <name> evaluate "window.location.href = 'https://example.com'" -t # -t/--track-navigation tracks URL changes
 chrome-devtools --target <name> evaluate "alert('hello')" --dialog-action accept
 chrome-devtools --target <name> snapshot   # Accessibility tree — use to understand page structure
+chrome-devtools --target <name> snapshot --output /tmp/tree.txt
 ```
 
 ### Interaction
@@ -81,16 +85,18 @@ chrome-devtools --target <name> wait-for "Success" --timeout 10000
 chrome-devtools --target <name> resize 1280 720
 ```
 
-## Global flags
+## Global flags & Environment Variables
 
-| Flag | Description |
+| Flag / Env Var | Description |
 |------|-------------|
 | `--target <name>` | Target page by friendly name or raw Chrome target ID |
 | `--page <index>` | Target page by index (for quick one-offs) |
-| `--json` | Machine-readable JSON output |
+| `--json` | Machine-readable JSON output (includes `navigated_to` and `error_code`) |
 | `--ws-endpoint <url>` | Explicit WebSocket endpoint (overrides auto-connect) — env: `CHROME_WS_ENDPOINT` |
 | `--user-data-dir <path>` | Custom Chrome profile directory — env: `CHROME_USER_DATA_DIR` |
 | `--channel <ch>` | Chrome channel: stable / beta / canary / dev — env: `CHROME_CHANNEL` |
+| `DAEMON_WAIT_TIMEOUT_SECS` | Env var: Max seconds to wait for a daemon to spawn (default: 5) |
+| `DAEMON_IDLE_TIMEOUT_SECS` | Env var: Max idle seconds before daemon terminates (default: 300) |
 
 ## Typical task pattern
 
