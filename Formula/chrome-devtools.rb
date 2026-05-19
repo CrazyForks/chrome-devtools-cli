@@ -1,12 +1,12 @@
 class ChromeDevtools < Formula
   desc "Chrome DevTools Protocol CLI — auto-connects to existing Chrome"
   homepage "https://github.com/aeroxy/chrome-devtools-cli"
-  version "0.2.1"
+  version "0.2.2"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/aeroxy/chrome-devtools-cli/releases/download/0.2.1/chrome-devtools-macos-arm64.zip"
-      sha256 "3af65b6bf261688b7dd6b56c26817a898189339936bddacb9a1303604d0f5874"
+      url "https://github.com/aeroxy/chrome-devtools-cli/releases/download/0.2.2/chrome-devtools-macos-arm64.zip"
+      sha256 "ec85eaaeac395f33e952c5478998d2e7df26365a21237fc8be145921ee02e247"
     end
   end
 
