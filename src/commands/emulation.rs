@@ -27,6 +27,16 @@ pub async fn set_geolocation(
     let lon = longitude.ok_or_else(|| anyhow::anyhow!("longitude required (or use --clear)"))?;
     let acc = accuracy.unwrap_or(100.0);
 
+    if !(-90.0..=90.0).contains(&lat) {
+        anyhow::bail!("latitude must be between -90 and 90");
+    }
+    if !(-180.0..=180.0).contains(&lon) {
+        anyhow::bail!("longitude must be between -180 and 180");
+    }
+    if !acc.is_finite() || acc < 0.0 {
+        anyhow::bail!("accuracy must be a non-negative finite number");
+    }
+
     client
         .send_to_target(
             session_id,

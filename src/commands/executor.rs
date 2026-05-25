@@ -10,6 +10,10 @@ use crate::result::CommandResult;
 /// Known arguments for each command. Used to detect and report unknown arguments.
 fn known_args(cmd: &str) -> &'static [&'static str] {
     match cmd {
+        "list-pages" => &[],
+        "new-page" => &["url"],
+        "close-page" => &["index"],
+        "select-page" => &["index"],
         "navigate" => &["url", "back", "forward", "reload", "extra_headers", "output"],
         "screenshot" => &["output", "format", "full_page"],
         "evaluate" => &["expression", "dialog_action", "output", "track_navigation"],
@@ -33,7 +37,14 @@ fn known_args(cmd: &str) -> &'static [&'static str] {
 fn validate_args(cmd: &str, args: &serde_json::Value) -> Result<()> {
     let known = known_args(cmd);
     if let Some(obj) = args.as_object() {
-        let unknown: Vec<&String> = obj.keys().filter(|k| !known.contains(&k.as_str())).collect();
+        let unknown: Vec<&String> = obj.keys().filter(|k| {
+            let key = k.as_str();
+            // dialog_action is handled globally for all page-level commands
+            if key == "dialog_action" && !is_browser_level(cmd) {
+                return false;
+            }
+            !known.contains(&key)
+        }).collect();
         if !unknown.is_empty() {
             let unknown_names: Vec<&str> = unknown.iter().map(|s| s.as_str()).collect();
             bail!(
@@ -76,6 +87,8 @@ pub async fn execute_command(client: &mut CdpClient, req: &DaemonRequest) -> Res
 
     let args = &req.args;
     let cmd = req.command.as_str();
+
+    validate_args(cmd, args)?;
 
     if is_browser_level(cmd) {
         return match cmd {
@@ -126,8 +139,6 @@ async fn inner_execute(
 ) -> Result<CommandResult> {
     let args = &req.args;
     let cmd = req.command.as_str();
-
-    validate_args(cmd, args)?;
 
     // Enable Page domain to receive dialog events for proactive rejection
     client
@@ -246,28 +257,15 @@ async fn inner_execute(
             _ => bail!("width and height required"),
         },
         "set-geolocation" => {
-            let clear = args
-                .get("clear")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if clear {
-                commands::emulation::set_geolocation(client, session_id, None, None, None, true)
-                    .await
-            } else {
-                let lat = args
-                    .get("latitude")
-                    .and_then(|v| v.as_f64())
-                    .ok_or(anyhow!("latitude required (or use --clear)"))?;
-                let lon = args
-                    .get("longitude")
-                    .and_then(|v| v.as_f64())
-                    .ok_or(anyhow!("longitude required (or use --clear)"))?;
-                let acc = args.get("accuracy").and_then(|v| v.as_f64());
-                commands::emulation::set_geolocation(
-                    client, session_id, Some(lat), Some(lon), acc, false,
-                )
-                .await
-            }
+            commands::emulation::set_geolocation(
+                client,
+                session_id,
+                args.get("latitude").and_then(|v| v.as_f64()),
+                args.get("longitude").and_then(|v| v.as_f64()),
+                args.get("accuracy").and_then(|v| v.as_f64()),
+                args.get("clear").and_then(|v| v.as_bool()).unwrap_or(false),
+            )
+            .await
         }
         "wait-for" => match args.get("text").and_then(|v| v.as_str()) {
             Some(text) => {
