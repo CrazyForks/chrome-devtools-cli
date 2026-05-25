@@ -7,6 +7,36 @@ use crate::constants::NAVIGATION_TIMEOUT_MS;
 use crate::friendly;
 use crate::result::CommandResult;
 
+async fn apply_extra_headers(
+    client: &mut CdpClient,
+    session_id: &str,
+    extra_headers: Option<&str>,
+) -> Result<()> {
+    if let Some(headers_json) = extra_headers {
+        let headers: serde_json::Value = serde_json::from_str(headers_json)
+            .map_err(|e| anyhow::anyhow!("Invalid --extra-headers JSON: {e}"))?;
+        let headers_obj = headers
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("--extra-headers must be a JSON object"))?;
+        for (k, v) in headers_obj {
+            if !v.is_string() {
+                anyhow::bail!("Header value for '{}' must be a string", k);
+            }
+        }
+        client
+            .send_to_target(session_id, "Network.enable", json!({}))
+            .await?;
+        client
+            .send_to_target(
+                session_id,
+                "Network.setExtraHTTPHeaders",
+                json!({"headers": headers_obj}),
+            )
+            .await?;
+    }
+    Ok(())
+}
+
 pub async fn list_pages(client: &mut CdpClient, as_json: bool) -> Result<CommandResult> {
     let pages = client.get_page_targets().await?;
 
@@ -41,6 +71,7 @@ pub async fn new_page(
     client: &mut CdpClient,
     url: &str,
     emulation: Option<crate::commands::emulation::EmulateParams>,
+    extra_headers: Option<&str>,
 ) -> Result<CommandResult> {
     if let Some(params) = emulation {
         // Create an empty page first so we can apply emulation before it loads the real URL
@@ -50,6 +81,7 @@ pub async fn new_page(
         // Use a block to ensure detachment and closure occurs even if emulation or navigation fails
         let result: Result<()> = async {
             crate::commands::emulation::emulate(client, &session_id, params).await?;
+            apply_extra_headers(client, &session_id, extra_headers).await?;
             let nav_result = client
                 .send_to_target(&session_id, "Page.navigate", json!({ "url": url }))
                 .await?;
@@ -73,6 +105,11 @@ pub async fn new_page(
         )))
     } else {
         let target_id = client.create_target(url).await?;
+        if let Some(headers) = extra_headers {
+            let session_id = client.attach_to_target(&target_id).await?;
+            let _ = apply_extra_headers(client, &session_id, Some(headers)).await;
+            let _ = client.detach_from_target(&session_id).await;
+        }
         Ok(CommandResult::output(format!(
             "Opened new page: {url} (target: {target_id})"
         )))
