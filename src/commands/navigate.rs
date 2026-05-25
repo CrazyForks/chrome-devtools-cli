@@ -163,8 +163,7 @@ pub async fn wait_for_load(client: &mut CdpClient, session_id: &str, timeout_ms:
 
     loop {
         if tokio::time::Instant::now() > deadline {
-            eprintln!("Warning: page did not reach readyState=complete within {timeout_ms}ms");
-            return Ok(());
+            anyhow::bail!("Timeout ({timeout_ms}ms) waiting for page readyState=complete");
         }
 
         let result = client

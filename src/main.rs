@@ -112,6 +112,9 @@ enum Commands {
         /// Geolocation accuracy in meters (default: 100)
         #[arg(long)]
         accuracy: Option<f64>,
+        /// Extra HTTP headers as a JSON object (e.g. '{"Authorization":"Bearer token"}')
+        #[arg(long)]
+        extra_headers: Option<String>,
     },
 
     /// Close a page/tab
@@ -340,6 +343,7 @@ fn build_request(cli: &Cli) -> DaemonRequest {
             mobile,
             geolocation,
             accuracy,
+            extra_headers,
         } => (
             "new-page",
             json!({
@@ -348,7 +352,8 @@ fn build_request(cli: &Cli) -> DaemonRequest {
                 "device_scale_factor": device_scale_factor,
                 "mobile": mobile,
                 "geolocation": geolocation,
-                "accuracy": accuracy
+                "accuracy": accuracy,
+                "extra_headers": extra_headers
             }),
         ),
         Commands::ClosePage { id_or_index } => (
@@ -556,12 +561,23 @@ async fn run_direct(cli: &Cli, ws_url: &str) -> Result<result::CommandResult> {
                 mobile,
                 geolocation,
                 accuracy,
+                extra_headers,
             } => {
                 if accuracy.is_some() && geolocation.is_none() {
                     anyhow::bail!("--accuracy requires --geolocation");
                 }
+                if *mobile && viewport.is_none() {
+                    anyhow::bail!("--mobile requires --viewport");
+                }
+                if device_scale_factor.is_some() && viewport.is_none() {
+                    anyhow::bail!("--device-scale-factor requires --viewport");
+                }
 
-                let params = if viewport.is_some() || geolocation.is_some() {
+                let params = if viewport.is_some()
+                    || geolocation.is_some()
+                    || device_scale_factor.is_some()
+                    || *mobile
+                {
                     Some(commands::emulation::EmulateParams {
                         viewport: viewport.clone(),
                         device_scale_factor: *device_scale_factor,
@@ -575,7 +591,7 @@ async fn run_direct(cli: &Cli, ws_url: &str) -> Result<result::CommandResult> {
                 } else {
                     None
                 };
-                commands::pages::new_page(&mut client, url, params).await
+                commands::pages::new_page(&mut client, url, params, extra_headers.as_deref()).await
             }
             _ => unreachable!(),
         };
@@ -641,9 +657,20 @@ async fn run_direct(cli: &Cli, ws_url: &str) -> Result<result::CommandResult> {
             if accuracy.is_some() && geolocation.is_none() {
                 anyhow::bail!("--accuracy requires --geolocation");
             }
+            if *mobile && viewport.is_none() {
+                anyhow::bail!("--mobile requires --viewport");
+            }
+            if device_scale_factor.is_some() && viewport.is_none() {
+                anyhow::bail!("--device-scale-factor requires --viewport");
+            }
 
             // Apply emulation before navigation if requested
-            if viewport.is_some() || geolocation.is_some() || *clear_all {
+            if viewport.is_some()
+                || geolocation.is_some()
+                || device_scale_factor.is_some()
+                || *mobile
+                || *clear_all
+            {
                 commands::emulation::emulate(
                     &mut client,
                     &session_id,

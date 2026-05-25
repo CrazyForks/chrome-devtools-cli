@@ -8,10 +8,10 @@ use crate::protocol::DaemonRequest;
 use crate::result::CommandResult;
 
 /// Known arguments for each command. Used to detect and report unknown arguments.
-fn known_args(cmd: &str) -> &'static [&'static str] {
+pub fn known_args(cmd: &str) -> &'static [&'static str] {
     match cmd {
         "list-pages" => &[],
-        "new-page" => &["url", "viewport", "device_scale_factor", "mobile", "geolocation", "accuracy"],
+        "new-page" => &["url", "viewport", "device_scale_factor", "mobile", "geolocation", "accuracy", "extra_headers"],
         "close-page" => &["id_or_index"],
         "select-page" => &["id_or_index"],
         "navigate" => &["url", "back", "forward", "reload", "extra_headers", "viewport", "device_scale_factor", "mobile", "geolocation", "accuracy", "clear_all", "output"],
@@ -92,13 +92,31 @@ pub async fn execute_command(client: &mut CdpClient, req: &DaemonRequest) -> Res
                 let viewport = args.get("viewport").and_then(|v| v.as_str());
                 let geolocation = args.get("geolocation").and_then(|v| v.as_str());
 
-                let params = if viewport.is_some() || geolocation.is_some() {
+                let accuracy = args.get("accuracy").and_then(|v| v.as_f64());
+                let mobile = args.get("mobile").and_then(|v| v.as_bool()).unwrap_or(false);
+                let device_scale_factor = args.get("device_scale_factor").and_then(|v| v.as_f64());
+
+                if accuracy.is_some() && geolocation.is_none() {
+                    anyhow::bail!("--accuracy requires --geolocation");
+                }
+                if mobile && viewport.is_none() {
+                    anyhow::bail!("--mobile requires --viewport");
+                }
+                if device_scale_factor.is_some() && viewport.is_none() {
+                    anyhow::bail!("--device-scale-factor requires --viewport");
+                }
+
+                let params = if viewport.is_some()
+                    || geolocation.is_some()
+                    || device_scale_factor.is_some()
+                    || mobile
+                {
                     Some(commands::emulation::EmulateParams {
                         viewport: viewport.map(|s| s.to_string()),
-                        device_scale_factor: args.get("device_scale_factor").and_then(|v| v.as_f64()),
-                        mobile: args.get("mobile").and_then(|v| v.as_bool()).unwrap_or(false),
+                        device_scale_factor,
+                        mobile,
                         geolocation: geolocation.map(|s| s.to_string()),
-                        accuracy: args.get("accuracy").and_then(|v| v.as_f64()),
+                        accuracy,
                         clear_viewport: false,
                         clear_geolocation: false,
                         clear_all: false,
@@ -107,7 +125,7 @@ pub async fn execute_command(client: &mut CdpClient, req: &DaemonRequest) -> Res
                     None
                 };
 
-                commands::pages::new_page(client, url, params).await
+                commands::pages::new_page(client, url, params, args.get("extra_headers").and_then(|v| v.as_str())).await
             }
             _ => unreachable!(),
         };
@@ -305,6 +323,13 @@ async fn inner_execute(
             .await
         }
         "emulate" => {
+            let geolocation = args.get("geolocation").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let accuracy = args.get("accuracy").and_then(|v| v.as_f64());
+
+            if accuracy.is_some() && geolocation.is_none() {
+                anyhow::bail!("--accuracy requires --geolocation");
+            }
+
             commands::emulation::emulate(
                 client,
                 session_id,
@@ -312,8 +337,8 @@ async fn inner_execute(
                     viewport: args.get("viewport").and_then(|v| v.as_str()).map(|s| s.to_string()),
                     device_scale_factor: args.get("device_scale_factor").and_then(|v| v.as_f64()),
                     mobile: args.get("mobile").and_then(|v| v.as_bool()).unwrap_or(false),
-                    geolocation: args.get("geolocation").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    accuracy: args.get("accuracy").and_then(|v| v.as_f64()),
+                    geolocation,
+                    accuracy,
                     clear_viewport: args.get("clear_viewport").and_then(|v| v.as_bool()).unwrap_or(false),
                     clear_geolocation: args.get("clear_geolocation").and_then(|v| v.as_bool()).unwrap_or(false),
                     clear_all: args.get("clear_all").and_then(|v| v.as_bool()).unwrap_or(false),
