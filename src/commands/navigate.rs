@@ -14,7 +14,12 @@ pub async fn navigate(
     extra_headers: Option<&str>,
     output: Option<&str>,
 ) -> Result<CommandResult> {
-    // Apply extra HTTP headers if provided (before any navigation)
+    // Validate navigation intent before mutating session state
+    if !back && !forward && !reload && url.is_none() {
+        bail!("URL required (or use --back, --forward, --reload)");
+    }
+
+    // Apply extra HTTP headers if provided
     if let Some(headers_json) = extra_headers {
         let headers: serde_json::Value = serde_json::from_str(headers_json)
             .map_err(|e| anyhow::anyhow!("Invalid --extra-headers JSON: {e}"))?;
@@ -40,8 +45,7 @@ pub async fn navigate(
         return do_reload(client, session_id, output).await;
     }
 
-    let url =
-        url.ok_or_else(|| anyhow::anyhow!("URL required (or use --back, --forward, --reload)"))?;
+    let url = url.unwrap(); // safe: validated above
 
     let result = client
         .send_to_target(session_id, "Page.navigate", json!({"url": url}))
