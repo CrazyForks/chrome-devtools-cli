@@ -68,12 +68,13 @@ pub async fn emulate(
 
     // 2. Handle setting viewport
     if let Some(viewport_str) = params.viewport {
-        let parts: Vec<&str> = viewport_str.split('x').collect();
+        let viewport_lower = viewport_str.to_lowercase();
+        let parts: Vec<&str> = viewport_lower.split('x').collect();
         if parts.len() != 2 {
             anyhow::bail!("Viewport must be in WxH format (e.g. 1280x720)");
         }
-        let w: u32 = parts[0].parse().map_err(|_| anyhow!("Invalid width: {}", parts[0]))?;
-        let h: u32 = parts[1].parse().map_err(|_| anyhow!("Invalid height: {}", parts[1]))?;
+        let w: u32 = parts[0].trim().parse().map_err(|_| anyhow!("Invalid width: {}", parts[0]))?;
+        let h: u32 = parts[1].trim().parse().map_err(|_| anyhow!("Invalid height: {}", parts[1]))?;
         if w == 0 {
             anyhow::bail!("Invalid width: {} (must be > 0)", w);
         }
@@ -106,8 +107,8 @@ pub async fn emulate(
         if parts.len() != 2 {
             anyhow::bail!("Geolocation must be in lat,lon format (e.g. 37.77,-122.41)");
         }
-        let lat: f64 = parts[0].parse().map_err(|_| anyhow!("Invalid latitude: {}", parts[0]))?;
-        let lon: f64 = parts[1].parse().map_err(|_| anyhow!("Invalid longitude: {}", parts[1]))?;
+        let lat: f64 = parts[0].trim().parse().map_err(|_| anyhow!("Invalid latitude: {}", parts[0]))?;
+        let lon: f64 = parts[1].trim().parse().map_err(|_| anyhow!("Invalid longitude: {}", parts[1]))?;
         let acc = params.accuracy.unwrap_or(100.0);
 
         if acc.is_sign_negative() || !acc.is_finite() {
