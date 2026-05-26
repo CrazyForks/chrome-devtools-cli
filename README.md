@@ -1,25 +1,58 @@
 # Chrome DevTools CLI
 
-A high-performance, developer-friendly CLI for interacting with Chrome via the DevTools Protocol (CDP).
+High-performance rust CLI that connects to an existing Chrome browser via the DevTools Protocol. Auto-connects by default, no manual WebSocket URL needed.
 
 [![crates.io](https://img.shields.io/crates/v/chrome-devtools-cli.svg)](https://crates.io/crates/chrome-devtools-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/aeroxy/chrome-devtools-cli)
 
-## Key Features
-
-- **Page Emulation**: Manage viewport size, mobile device emulation, device scale factor, and geolocation overrides in one place.
-- **Smart Navigation**: URL navigation, back/forward, and reload with automatic page-load waiting and custom HTTP headers.
-- **Visual Tools**: High-quality screenshots (including full-page) and accessibility tree snapshots.
-- **Interaction**: Click, fill, type, and hover using CSS selectors or coordinates.
-- **JS Evaluation**: Run JavaScript on the page with support for handling dialogs.
-- **3rd Party Integration**: Access tools exposed by pages via custom protocol extensions.
-
 ## Installation
 
+### Homebrew (macOS, recommended)
+
 ```bash
-cargo install --path .
+brew install aeroxy/tap/chrome-devtools
 ```
+
+### Cargo
+
+```bash
+cargo install chrome-devtools-cli
+```
+
+The installed binary is named `chrome-devtools`.
+
+### Build from source
+
+```bash
+cargo build --release
+# Binary: ./target/release/chrome-devtools
+```
+
+## Why this exists
+
+Inspired by [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) — the official MCP server for Chrome DevTools. It works well, but MCP-based browser tools consume a lot of token context: every interaction sends and receives large protocol payloads through the MCP layer.
+
+99% of the time the browser being controlled is the user's own Chrome with their own credentials, so there is no need for a full headless browser stack like Puppeteer or Playwright, and no need for the MCP overhead.
+
+This is a lightweight Rust binary that talks directly to Chrome's DevTools Protocol. One command in, one result out. No separate browser process, no credential handoff, no heavyweight runtime. The agent skill for this tool is a single `SKILL.md` file — the entire context overhead is this documentation.
+
+## Architecture
+
+```
+chrome-devtools navigate https://example.com
+        │
+        ├─ Try daemon (Unix socket /tmp/chrome-devtools-daemon.sock)
+        │   └─ If running → send command → get result
+        │
+        ├─ If no daemon → spawn one (background process)
+        │   └─ Daemon connects to Chrome WebSocket (one-time approval)
+        │   └─ Listens on Unix socket, 5-min idle timeout
+        │
+        └─ Fallback → direct WebSocket connection (no daemon)
+```
+
+The daemon keeps a persistent WebSocket connection to Chrome, so the browser only prompts for DevTools access once. Subsequent commands reuse the connection.
 
 ## Prerequisites
 
@@ -29,57 +62,183 @@ Chrome must have remote debugging enabled:
 2. Go to `chrome://inspect/#remote-debugging`
 3. Enable the remote debugging server
 
-## Quick Start
+## Auto-connect
 
-### General Usage
+By default, the CLI reads `DevToolsActivePort` from Chrome's user data directory:
+
+| OS | Default path |
+|----|-------------|
+| macOS | `~/Library/Application Support/Google/Chrome/` |
+| Linux | `~/.config/google-chrome/` |
+| Windows | `%LOCALAPPDATA%\Google\Chrome\User Data\` |
+
+Override with `--user-data-dir`, `--channel` (beta/canary/dev), or `--ws-endpoint`. All three also read from environment variables:
+
+| Environment Variable | Corresponding Flag |
+|----------------------|--------------------|
+| `CHROME_WS_ENDPOINT` | `--ws-endpoint` |
+| `CHROME_USER_DATA_DIR` | `--user-data-dir` |
+| `CHROME_CHANNEL` | `--channel` |
+
+## Page targeting
+
+Every page-level command outputs a friendly target name like `[target:red-snake]`. This is a deterministic word-pair derived from Chrome's internal target ID — same page always gets the same name.
+
 ```bash
-chrome-devtools list-pages
-chrome-devtools --page 0 navigate https://google.com
-chrome-devtools --target main screenshot --output screenshot.png
+# Navigate — note the target name
+chrome-devtools navigate https://example.com
+# Navigated to https://example.com
+# [target:red-snake]
+
+# Pin subsequent commands to the same page
+chrome-devtools --target red-snake screenshot --output /tmp/page.png
+chrome-devtools --target red-snake evaluate "document.title"
 ```
 
-### Emulation (Page-level Overrides)
-Overrides like viewport size and geolocation are persistent per page.
+Without `--target`, commands default to page index 0, which may vary as Chrome reorders tabs. Always capture and reuse the target name.
 
-```bash
-# Set viewport and geolocation
-chrome-devtools emulate --viewport 1280x720 --geolocation 37.77,-122.41
+`list-pages` shows all pages with their friendly names:
 
-# Emulate mobile device
-chrome-devtools emulate --viewport 375x812 --mobile --device-scale-factor 3
-
-# Navigate with emulation
-chrome-devtools navigate https://example.com --viewport 1920x1080 --mobile
-
-# Open new tab with emulation
-chrome-devtools new-page https://example.com --viewport 375x812 --geolocation 40.71,-74.00
-
-# Clear overrides
-chrome-devtools emulate --clear-all
-chrome-devtools emulate --clear-viewport
-chrome-devtools emulate --clear-geolocation
 ```
+[0] (green-dog) My App — https://localhost:3000
+[1] (red-snake) Example Domain — https://example.com
+[2] (bold-stag) GitHub — https://github.com
+```
+
+You can also use `--page <index>` for quick one-offs, or pass the raw hex target ID.
+
+## Commands
+
+### Navigation
+
+| Command | Description |
+|---------|-------------|
+| `navigate <url>` | Go to URL (waits for load) |
+| `navigate --back` | Go back in history |
+| `navigate --forward` | Go forward |
+| `navigate --reload` | Reload page |
+| `new-page <url>` | Open new tab |
+| `close-page <index>` | Close tab by index |
+| `select-page <index>` | Bring tab to front |
+| `list-pages` | List all open tabs |
+
+`navigate` and `new-page` accept atomic emulation flags (`--viewport`, `--mobile`, `--device-scale-factor`, `--geolocation`, `--accuracy`) and `--extra-headers` for custom HTTP headers, so you can navigate and emulate in a single call.
+
+### Inspection
+
+| Command | Description |
+|---------|-------------|
+| `screenshot --output <path>` | Save screenshot to file |
+| `screenshot --full-page` | Capture full scrollable page |
+| `evaluate <expr> [--dialog-action <action>]` | Run JavaScript (optionally handle dialogs: accept, dismiss, or prompt text) |
+| `snapshot` | Accessibility tree dump |
 
 ### Interaction
-```bash
-chrome-devtools click "button.submit"
-chrome-devtools fill "input[name='q']" "searching for something"
-chrome-devtools type-text "submitting now" --submit-key Enter
+
+| Command | Description |
+|---------|-------------|
+| `click <selector>` | Click element by CSS selector |
+| `click-at <x> <y>` | Click at specific coordinates |
+| `fill <selector> <value>` | Fill input field, dropdown (`<select>`), or toggle checkbox/radio (`"true"`/`"false"`) |
+| `type-text <text> [--submit-key <key>]` | Type into focused element (optionally press key after) |
+| `press-key <key>` | Press key (e.g. `Enter`, `Control+A`) |
+| `hover <selector>` | Hover over element |
+
+### Third-party developer tools
+
+| Command | Description |
+|---------|-------------|
+| `list-3p-tools` | List custom developer tools exposed via `window.__dtmcp` |
+| `execute-3p-tool <name> <params>` | Execute a custom tool by name with a JSON params string |
+
+These commands interact with tools injected into the page via `window.__dtmcp.toolGroup` / `window.__dtmcp.executeTool`.
+
+### Other
+
+| Command | Description |
+|---------|-------------|
+| `emulate` | Get/set page-based emulation overrides (viewport, geolocation) |
+| `emulate --viewport 1280x720` | Set viewport size (page-based, persists) |
+| `emulate --geolocation 37.77,-122.41` | Set geolocation (page-based, persists) |
+| `emulate --clear-all` | Clear all emulation overrides |
+| `wait-for <text> [--timeout ms]` | Wait for text to appear (default 30s) |
+
+`emulate` with no flags shows all active overrides. Viewport and geolocation overrides are **page-based** — they persist until cleared or the page is closed.
+
+## Global options
+
+| Flag | Description |
+|------|-------------|
+| `--target <name>` | Target page by friendly name or raw ID |
+| `--page <index>` | Target page by index |
+| `--json` | JSON output |
+| `--ws-endpoint <url>` | Explicit WebSocket URL |
+| `--user-data-dir <path>` | Custom Chrome profile directory |
+| `--channel <ch>` | Chrome channel (stable/beta/canary/dev) |
+
+## Daemon details
+
+- **Socket**: `/tmp/chrome-devtools-daemon.sock`
+- **PID file**: `/tmp/chrome-devtools-daemon.pid`
+- **Idle timeout**: 5 minutes (auto-exits, cleans up socket)
+- **Protocol**: Length-prefixed JSON over Unix socket
+- **Spawned by**: First CLI invocation (transparent to user)
+- **Kill manually**: `pkill -f __daemon__` or delete the socket
+
+## Source layout
+
+```
+src/
+├── main.rs           # Entry point + daemon dispatch
+├── lib.rs            # CLI (clap) + command routing
+├── cdp.rs            # Raw CDP over WebSocket (JSON-RPC)
+├── browser.rs        # Auto-connect (DevToolsActivePort)
+├── daemon.rs         # Background daemon (persistent connection)
+├── client.rs         # Talks to daemon via Unix socket
+├── protocol.rs       # IPC message types
+├── friendly.rs       # Target ID → word-pair names
+├── result.rs         # Command result types
+├── error.rs          # CLI error types and codes
+├── constants.rs      # Shared constants
+├── telemetry.rs      # Logging and telemetry
+└── commands/
+    ├── mod.rs
+    ├── navigate.rs
+    ├── pages.rs      # list/new/close/select/wait-for
+    ├── screenshot.rs
+    ├── evaluate.rs
+    ├── executor.rs   # Command dispatch
+    ├── input.rs      # click/fill/type/press/hover
+    ├── snapshot.rs
+    ├── emulation.rs  # emulate (viewport/geolocation get/set/clear)
+    └── third_party.rs # list-3p-tools/execute-3p-tool
 ```
 
-### Custom HTTP Headers
-```bash
-# Add authorization header
-chrome-devtools navigate https://api.example.com --extra-headers '{"Authorization":"Bearer token"}'
+## Typical workflow
 
-# Debug headers
-chrome-devtools new-page https://example.com --extra-headers '{"X-Debug":"1"}'
+```bash
+# 1. Navigate — capture the [target:name]
+chrome-devtools navigate https://example.com
+# [target:red-snake]
+
+# 2. Understand the page
+chrome-devtools --target red-snake snapshot
+chrome-devtools --target red-snake screenshot --output /tmp/page.png
+
+# 3. Interact
+chrome-devtools --target red-snake fill "#email" "user@example.com"
+chrome-devtools --target red-snake click "#submit"
+
+# 4. Extract data
+chrome-devtools --target red-snake evaluate "document.title"
 ```
 
-## Global Options
+Always pass `--target` from step 2 onward to stay on the same page.
 
-- `--ws-endpoint`: Use an explicit WebSocket URL.
-- `--user-data-dir`: Auto-connect to a running Chrome instance.
-- `--page <index>`: Select page by 0-based index.
-- `--target <id>`: Select page by friendly name or ID.
-- `--json`: Format output as JSON.
+## Agent skill
+
+`skill/chrome-devtools/SKILL.md` is a Claude Code skill that teaches the agent how to use this binary. Drop it into any Claude Code plugin's `skills/` directory and set `chrome-devtools` to the binary path. The skill covers the full workflow, all commands, and the `--target` pinning pattern — everything needed to reliably automate Chrome without large context overhead.
+
+## License
+
+MIT
