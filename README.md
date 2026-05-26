@@ -1,6 +1,10 @@
-# chrome-devtools-cli
+# Chrome DevTools CLI
 
 A high-performance, developer-friendly CLI for interacting with Chrome via the DevTools Protocol (CDP).
+
+[![crates.io](https://img.shields.io/crates/v/chrome-devtools-cli.svg)](https://crates.io/crates/chrome-devtools-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/aeroxy/chrome-devtools-cli)
 
 ## Key Features
 
